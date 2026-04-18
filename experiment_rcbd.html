@@ -1,0 +1,204 @@
+\<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Memory Experiment - Final Version</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 600px; width: 90%; text-align: center; }
+        .hidden { display: none !important; }
+        .input-group { margin: 15px 0; text-align: left; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+        .input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        .word-item { padding: 12px; font-size: 1.5em; font-weight: bold; color: #1a73e8; border-bottom: 1px solid #eee; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 20px 0; }
+        .word-btn { padding: 12px; border: 2px solid #e0e0e0; background: #fff; border-radius: 8px; cursor: pointer; }
+        .word-btn.selected { background: #1a73e8; color: white; border-color: #1a73e8; }
+        .action-btn { background: #1a73e8; color: white; border: none; padding: 15px 30px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
+        .timer { font-size: 3em; color: #d93025; margin: 20px 0; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="intro-screen">
+        <h2>Experiment Setup</h2>
+        <div class="input-group">
+            <label>Participant ID:</label>
+            <input type="text" id="p-id" value="001">
+        </div>
+        <div class="input-group">
+            <label>Block (RCBD):</label>
+            <input type="text" id="b-id" value="A">
+        </div>
+        <div class="input-group">
+            <label>Treatment:</label>
+            <select id="set-type">
+                <option value="Animals">Category (Animals)</option>
+                <option value="Random">Random (Objects)</option>
+            </select>
+        </div>
+        <button class="action-btn" onclick="safeStart()">Start Study Phase</button>
+    </div>
+
+    <div id="study-screen" class="hidden">
+        <h2>Memorize these words</h2>
+        <div class="timer" id="timer">00:30</div>
+        <div id="word-display"></div>
+    </div>
+
+    <div id="test-screen" class="hidden">
+        <h2>Select the 10 words you saw</h2>
+        <p>Selected: <span id="count">0</span>/10</p>
+        <div class="grid" id="test-grid"></div>
+        <button class="action-btn" id="submit-btn" onclick="safeSubmit()" style="background:#ccc" disabled>Finish Task</button>
+    </div>
+
+    <div id="end-screen" class="hidden">
+        <h2>Data Recorded</h2>
+        <p>Click "Next" to reset, or "Download" for the file.</p>
+        <button class="action-btn" onclick="location.reload()" style="background:#34a853; margin-bottom:10px;">Next Round</button>
+        <button class="action-btn" onclick="safeDownload()" style="background:#8e44ad;">Download CSV</button>
+    </div>
+</div>
+
+<script>
+    // Data Pools
+    const wordSets = {
+        "Animals": {
+            "targets": ["Lion", "Tiger", "Elephant", "Zebra", "Giraffe", "Monkey", "Rabbit", "Panda", "Kangaroo", "Hippo"],
+            "distractors": ["Wolf", "Deer", "Horse", "Bear", "Eagle", "Snake", "Shark", "Whale", "Camel", "Goat"]
+        },
+        "Random": {
+            "targets": ["Pen", "Bottle", "Cloud", "Key", "Lamp", "Bread", "Phone", "Watch", "Spoon", "Hammer"],
+            "distractors": ["Wall", "Chair", "Window", "Book", "Paper", "Glass", "Mirror", "Box", "Bag", "Coin"]
+        }
+    };
+
+    let sessionResults = [];
+    let currentSelected = [];
+    let currentTargets = [];
+    let currentType = "";
+
+    // 1. START FUNCTION
+    function safeStart() {
+        try {
+            // Get Info
+            const id = document.getElementById('p-id').value;
+            const block = document.getElementById('b-id').value;
+            currentType = document.getElementById('set-type').value;
+            currentTargets = wordSets[currentType].targets;
+
+            // Display Words
+            const display = document.getElementById('word-display');
+            display.innerHTML = "";
+            currentTargets.forEach(w => {
+                display.innerHTML += `<div class="word-item">${w}</div>`;
+            });
+
+            // Switch Screen
+            document.getElementById('intro-screen').classList.add('hidden');
+            document.getElementById('study-screen').classList.remove('hidden');
+
+            // Timer
+            let time = 30;
+            let interval = setInterval(() => {
+                time--;
+                document.getElementById('timer').textContent = "00:" + (time < 10 ? "0"+time : time);
+                if (time <= 0) {
+                    clearInterval(interval);
+                    startTest();
+                }
+            }, 1000);
+
+        } catch (e) {
+            alert("Error starting: " + e.message);
+        }
+    }
+
+    // 2. TEST FUNCTION
+    function startTest() {
+        document.getElementById('study-screen').classList.add('hidden');
+        document.getElementById('test-screen').classList.remove('hidden');
+
+        const distractors = wordSets[currentType].distractors;
+        const combined = [...currentTargets, ...distractors].sort(() => Math.random() - 0.5);
+        
+        const grid = document.getElementById('test-grid');
+        grid.innerHTML = "";
+        combined.forEach(w => {
+            let btn = document.createElement('button');
+            btn.className = 'word-btn';
+            btn.textContent = w;
+            btn.onclick = () => {
+                if(currentSelected.includes(w)) {
+                    currentSelected = currentSelected.filter(x => x !== w);
+                    btn.classList.remove('selected');
+                } else if(currentSelected.length < 10) {
+                    currentSelected.push(w);
+                    btn.classList.add('selected');
+                }
+                document.getElementById('count').textContent = currentSelected.length;
+                const sub = document.getElementById('submit-btn');
+                sub.disabled = (currentSelected.length !== 10);
+                sub.style.background = (currentSelected.length === 10) ? "#34a853" : "#ccc";
+            };
+            grid.appendChild(btn);
+        });
+    }
+
+    // 3. SUBMIT FUNCTION
+    function safeSubmit() {
+        const score = currentSelected.filter(w => currentTargets.includes(w)).length;
+        const record = {
+            id: document.getElementById('p-id').value,
+            block: document.getElementById('b-id').value,
+            type: currentType,
+            score: score,
+            time: new Date().toLocaleString()
+        };
+
+        // Save to memory
+        sessionResults.push(record);
+        
+        // Save to disk (optional backup)
+        try {
+            let local = JSON.parse(localStorage.getItem('finalResults')) || [];
+            local.push(record);
+            localStorage.setItem('finalResults', JSON.stringify(local));
+        } catch(err) {}
+
+        // Go to End
+        document.getElementById('test-screen').classList.add('hidden');
+        document.getElementById('end-screen').classList.remove('hidden');
+    }
+
+    // 4. DOWNLOAD FUNCTION
+    function safeDownload() {
+        let data = sessionResults;
+        try { 
+            let disk = JSON.parse(localStorage.getItem('finalResults')) || []; 
+            if(disk.length > data.length) data = disk;
+        } catch(e) {}
+
+        if(data.length === 0) return alert("No data yet.");
+
+        let csv = "ID,Block,Treatment,Score,Time\n" + 
+                  data.map(r => `"${r.id}","${r.block}","${r.type}",${r.score},"${r.time}"`).join("\n");
+
+        // The Copy-to-Clipboard Failsafe
+        navigator.clipboard.writeText(csv).then(() => {
+            alert("Data copied to clipboard! Paste it into Excel. (Downloading file now...)");
+        });
+
+        const uri = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+        const link = document.createElement("a");
+        link.href = uri;
+        link.download = "experiment_results.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+</body>
+</html>
